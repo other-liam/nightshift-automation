@@ -2,23 +2,46 @@ $('.message a').click(function(){
    $('form').animate({height: "toggle", opacity: "toggle"}, "slow");
 });
 
-var prefix = 'realtimeShiftCommand -r"'; // the first part of the Add PRMT3 command
-var suffix = '" -n"1" -d"AUSQLD '; // the second part of the Add PRMT 3 command
-var append = '" -!"PRMT3"'; // the final part of the Add PRMT 3 command
-var today = new Date(); // define today as a new date object
-var reuseprefix = 'vc -v"'; // the first part of the Set Reuse command
-var reusesuffixOff = '" -^"1"'; // the second part of the Set Reuse commnd, setting the value to 1
-var reusesuffixOn = '" -^"0"'; // the second part of the Set Reuse command, setting the value to 0
-var dd = today.getDate(); // define dd as the Date item within the today variable
-var mm = today.getMonth() + 1; // define mm as the Month item within the today variable. January is 0!
-var yyyy = today.getFullYear(); // define yyyy as the Full Year item within the today variable
-var fixprefix = 'realtimeShiftCommand -r"'; // the first part of the Remove PRMT3 command
-var fixsuffix = '" -n"1" -d"AUSQLD '; // the second part of the Remove PRMT3 command
-var fixappend = '" -!""'; // the final part of the Remove PRMT3 command
-var secondShiftPrefix = 'resCalendar  -a"UpdateItem" -r"'; // the first part of the Change Second Shift command
-var secondShiftSuffix = '" -d"'; // the second part of the Change Second Shift command
-var secondShiftAppend = '" -n"2" -H"1" -!"NIGHT,PRMT3"'; // the final part of the Change Second Shift command, setting the value to 1 (active)
-var secondShiftAppendUndo = '" -n"2" -H"0" -!"unset"'; // the final part of the Change Second Shift command, setting the value to 2 (inactive)
+//LIST OF VARIABLES I'LL NEED
+
+//CUT BACK REALTIME SHIFT TO 2:00 - 17:00, ADD PRMT3 PROPERTY
+var rtShiftCommand = 'realtimeShiftCommand -r"';
+var rtRegion = '" -d"AUSQLD ';
+var rtCutbackAndPermit = '" -R"AUSQLD 2:00 -AUSQLD 17:00" -!"PRMT3"';
+
+//CUT BACK SHIFT 1 TO 2:00 - 17:00
+var calChange = 'resCalendar  -a"AddItem" -r"';
+var calDateChange = '" -d"';
+var calShiftOneChange = '" -s"AUSQLD,';
+var shiftOneStartTime = '';
+var shiftOneEndTime = '';
+var endQuote = '"';
+
+//CREATE SHIFT 2 AS 17:00 - 20:00, ADD PRMT3 + NIGHT PROPERTIES
+var calShiftTwoChange = '" -n"2" -s"AUSQLD,';
+var shiftTwoStartTime = '';
+var shiftTwoEndTime = '';
+var calPermits = '" -c"NIGHT SHIFT" -H"1" -!"NIGHT,PRMT3"';
+
+//RE-USE ON
+var reuse = 'vc -v"';
+var reuseOn = '" -^"1"';
+
+//RE-USE OFF
+var reuseOff = '" -^"0"';
+
+//UNDO
+var rtUndo = '" -x"1" -!""'
+var calUndo = 'resCalendar  -a"UpdateItem" -r"'
+var calSecondShiftUndo = '" -n"2" -s"unset" -c"unset" -H"unset" -!"unset"'
+var calFirstShiftUndo = '" -n"1" -s"unset"'
+
+//SET UP FOR DATE MAGIC
+
+var today = new Date();
+var dd = today.getDate();
+var mm = today.getMonth() + 1;
+var yyyy = today.getFullYear();
 
 if (dd < 10) { // if the date is any single digit
   dd = "0" + dd; // add a leading 0, so the day is always 2 digits long.
@@ -28,114 +51,219 @@ if (mm < 10) { // if the month is any single digit
   mm = "0" + mm; // add a leading 0, so the day is always 2 digits long.
 }
 
-today = dd + "." + mm + "." + yyyy; // define today as the day (dd), month (mm), and year (yyyy), separated by a period
+today = dd + "." + mm + "." + yyyy;
 
-$("#btn-save").click(function() { // on click of the Apply PRMT 3 button
-  var truckList = $("#input-fileName").val(); // get the list of trucks from the #input-fileName field in the HTML file. Call that truckList.
-  var truckArray = truckList.split(";"); // split the single list of trucks, which are seperated by a semicolon, into an array. Call that truckArray.
-  for (var i = 0; i < truckArray.length; i++) { // for loop, which runs the same number of times as there are items in the truckArray
-    truckArray[i] = // for each item in the array, add the first part of the Add PRMT3 command (prefix), then the truck number [i], then the second part of the Add PRMT3 command (suffix), then today's date (today), then the final part of the Add PRMT3 command (append).
-      prefix +
-      truckArray[i] +
-      suffix +
-      today +
-      append; 
-  }
-  var newestArray = truckArray.join("\r\n"); // join all the items (with their new code padding) in truckArray into a single item, with a line break ("\r\n") in between. Call that new item newestArray.
+function getDayName(dateStr, locale)
+{
+    var date = new Date(dateStr);
+    return date.toLocaleDateString(locale, { weekday: 'long' });        
+}
+
+var dateStr = Date();
+var day = getDayName(dateStr);
+
+var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+var d = new Date(dateStr);
+var dayName = days[d.getDay()];
+
+//END DATE MAGIC
+
+//SET UP FOR START TIME CALCULATION MAGIC
+if (dayName == 'Monday') {
+  var shiftOneStartTime = "93600";
+  var shiftOneEndTime = "147600";
+  var shiftTwoStartTime = "147600";
+  var shiftTwoEndTime = "158400";
+} else if (dayName == 'Tuesday') {
+  var shiftOneStartTime = "180000";
+  var shiftOneEndTime = "234000";
+  var shiftTwoStartTime = "234000";
+  var shiftTwoEndTime = "244800";
+} else if (dayName == 'Wednesday') {
+  var shiftOneStartTime = "266400";
+  var shiftOneEndTime = "320400";
+  var shiftTwoStartTime = "320400";
+  var shiftTwoEndTime = "331200";
+} else if (dayName == 'Thursday') {
+  var shiftOneStartTime = "352800";
+  var shiftOneEndTime = "406800";
+  var shiftTwoStartTime = "406800";
+  var shiftTwoEndTime = "417600";
+} else if (dayName == 'Friday') {
+  var shiftOneStartTime = "439200";
+  var shiftOneEndTime = "493200";
+  var shiftTwoStartTime = "493200";
+  var shiftTwoEndTime = "504000";
+} else {
+  console.log("NOT A NIGHTSHIFT-COMPATIBLE DAY");
+}
+//END START TIME CALCULATION MAGIC
+
+//SAVE PRMT3 FILE BUTTON
+$("#btn-save").click(function() {
   
-  var secondShiftArray = truckList.split(";"); // split the single list of trucks from before, which are seperated by a semicolon, into an array. Call that secondShiftArray.
-  for (var i = 0; i < secondShiftArray.length; i++) { // for loop, which runs the same number of times as there are items in the secondShiftArray
-    secondShiftArray[i] =
-      secondShiftPrefix +
-      secondShiftArray[i] +
-      secondShiftSuffix +
-      today +
-      secondShiftAppend;
-  }
-  var secondShiftArrayOutput = secondShiftArray.join("\r\n"); // join all the items (with their new code padding) in secondShiftArray into a single item, with a line break ("\r\n") in between. Call that new item secondShiftArrayOutput.
-
-  var reuseArrayOff = truckList.split(";"); // split the single list of trucks from before, which are seperated by a semicolon, into an array. Call that reuseArrayOff.
-  for (var i = 0; i < reuseArrayOff.length; i++) {  // for loop, which runs the same number of times as there are items in the reuseArrayOff
-    reuseArrayOff[i] =
-      reuseprefix +
-      reuseArrayOff[i] +
-      reusesuffixOff;
-  }
-  var reuseArrayOffOutput = reuseArrayOff.join("\r\n"); // join all the items (with their new code padding) in reuseArrayOff into a single item, with a line break ("\r\n") in between. Call that new item reuseArrayOffOutput.
+  var unformattedTruckList = $("#input-truckList").val();
+  var truckArray = unformattedTruckList.split(";");
   
-  var reuseArrayOn = truckList.split(";"); // split the single list of trucks from before, which are seperated by a semicolon, into an array. Call that reuseArrayOn.
-  for (var i = 0; i < reuseArrayOn.length; i++) { // for loop, which runs the same number of times as there are items in the reuseArrayOn
-    reuseArrayOn[i] =
-      reuseprefix +
-      reuseArrayOn[i] +
-      reusesuffixOn;
+  //CUT BACK REALTIME SHIFT
+  var arrayOfTrucksForRealtime = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForRealtime.length; i++) {
+    arrayOfTrucksForRealtime[i] =
+      rtShiftCommand +
+      arrayOfTrucksForRealtime[i] +
+      rtRegion +
+      today +
+      rtCutbackAndPermit;
   }
-  var reuseArrayOnOutput = reuseArrayOn.join("\r\n"); // join all the items (with their new code padding) in reuseArrayOn into a single item, with a line break ("\r\n") in between. Call that new item reuseArrayOnOutput.
-
-  var output = newestArray; // define a new variable called output, which is newestArray (the list of trucks with Add PRMT3 commands, seperated by line breaks)
-  var outputArray = [ // define a new array called outputArray, which is newestArray, secondShiftArrayOutput, reuseArrayOffOut, and reuseArrayOnOuput combined
-    newestArray,
-    secondShiftArrayOutput,
-    reuseArrayOffOutput,
-    reuseArrayOnOutput
-  ].join("\r\n"); // join all four arrays together into a single item, seperated by a line break
-  var filename = "Apply PRMT3 " + today; // define a new variable, filename, as "Add PRMT 3" and then today's date
-  var blob = new Blob([outputArray], { type: "cmd" }); // create a new blob, which contains the data from outputArray, with the file type "cmd"
-  saveAs(blob, filename + ".cmd"); // prompt the user to save the blob as filename.cmd
+  
+  var listOfRealtimeCutbackCommands = arrayOfTrucksForRealtime.join("\r\n");
+  
+  //CUT BACK SHIFT 1
+  var arrayOfTrucksForShiftOne = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForShiftOne.length; i++) {
+    arrayOfTrucksForShiftOne[i] =
+      calChange +
+      arrayOfTrucksForShiftOne[i] +
+      calDateChange +
+      today +
+      calShiftOneChange +
+      shiftOneStartTime +
+      ',' +
+      shiftOneEndTime +
+      endQuote;
+  }
+  
+  var listOfShiftOneChangeCommands = arrayOfTrucksForShiftOne.join("\r\n");
+  
+  //CREATE SHIFT 2
+  var arrayOfTrucksForShiftTwo = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForShiftTwo.length; i++) {
+    arrayOfTrucksForShiftTwo[i] =
+      calChange +
+      arrayOfTrucksForShiftTwo[i] +
+      calDateChange +
+      today +
+      calShiftTwoChange +
+      shiftTwoStartTime +
+      ',' +
+      shiftTwoEndTime +
+      calPermits;
+  }
+  
+  var listOfShiftTwoCommands = arrayOfTrucksForShiftTwo.join("\r\n");
+  
+  //RE-USE ON
+  var arrayOfTrucksForReuseOn = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForReuseOn.length; i++) {
+    arrayOfTrucksForReuseOn[i] =
+      reuse +
+      arrayOfTrucksForReuseOn[i] +
+      reuseOn;
+  }
+  
+  var listOfReuseOnCommands = arrayOfTrucksForReuseOn.join("\r\n");
+  
+  //RE-USE OFF
+  var arrayOfTrucksForReuseOff = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForReuseOff.length; i++) {
+    arrayOfTrucksForReuseOff[i] =
+      reuse +
+      arrayOfTrucksForReuseOff[i] +
+      reuseOff;
+  }
+  
+  var listOfReuseOffCommands = arrayOfTrucksForReuseOff.join("\r\n");
+  
+  var outputArray = [
+    listOfRealtimeCutbackCommands,
+    listOfShiftOneChangeCommands,
+    listOfShiftTwoCommands,
+    listOfReuseOnCommands,
+    listOfReuseOffCommands
+  ].join("\r\n");
+  
+  var filename = "Apply night shift for " + today;
+  var blob = new Blob([outputArray], { type: "cmd" });
+  saveAs(blob, filename + ".cmd");
   document.getElementById('result').innerHTML = outputArray;
 });
 
-$("#btn-undo").click(function() { // on click of the Apply PRMT 3 button
-  var truckList = $("#input-fileName").val(); // get the list of trucks from the #input-fileName field in the HTML file. Call that truckList.
-  var truckArray = truckList.split(";"); // split the single list of trucks, which are seperated by a semicolon, into an array. Call that truckArray.
-  for (var i = 0; i < truckArray.length; i++) { // for loop, which runs the same number of times as there are items in the truckArray
-    truckArray[i] =
-      fixprefix +
-      truckArray[i] +
-      fixsuffix +
+$("#btn-undo").click(function() {
+  
+  var unformattedTruckList = $("#input-truckList").val();
+  var truckArray = unformattedTruckList.split(";");
+  
+  //UNDO CUT BACK REALTIME SHIFT
+  var undoArrayOfTrucksForRealtime = unformattedTruckList.split(";");
+  for (var i = 0; i < undoArrayOfTrucksForRealtime.length; i++) {
+    undoArrayOfTrucksForRealtime[i] =
+      rtShiftCommand +
+      undoArrayOfTrucksForRealtime[i] +
+      rtRegion +
       today +
-      fixappend;
+      rtUndo;
   }
-  var newestArray = truckArray.join("\r\n"); // join all the items (with their new code padding) in truckArray into a single item, with a line break ("\r\n") in between. Call that new item newestArray.
-
-  var secondShiftArray = truckList.split(";"); // split the single list of trucks from before, which are seperated by a semicolon, into an array. Call that secondShiftArray.
-  for (var i = 0; i < secondShiftArray.length; i++) { // for loop, which runs the same number of times as there are items in the secondShiftArray
-    secondShiftArray[i] =
-      secondShiftPrefix +
-      secondShiftArray[i] +
-      secondShiftSuffix +
+  
+  var listOfUndoRealtimeCutbackCommands = undoArrayOfTrucksForRealtime.join("\r\n");
+  
+  //CLEAR 2ND SHIFT
+  var undoArrayOfSecondShifts = unformattedTruckList.split(";");
+  for (var i = 0; i < undoArrayOfSecondShifts.length; i++) {
+    undoArrayOfSecondShifts[i] =
+      calUndo +
+      undoArrayOfSecondShifts[i] +
+      calDateChange +
       today +
-      secondShiftAppendUndo;
+      calSecondShiftUndo;
   }
-  var secondShiftArrayOutput = secondShiftArray.join("\r\n"); // join all the items (with their new code padding) in secondShiftArray into a single item, with a line break ("\r\n") in between. Call that new item secondShiftArrayOutput.
   
-  var reuseArrayOff = truckList.split(";"); // split the single list of trucks from before, which are seperated by a semicolon, into an array. Call that reuseArrayOff.
-  for (var i = 0; i < reuseArrayOff.length; i++) { // for loop, which runs the same number of times as there are items in the reuseArrayOff
-    reuseArrayOff[i] =
-      reuseprefix +
-      reuseArrayOff[i] +
-      reusesuffixOff;
+  var listOfUndoSecondShiftCommands = undoArrayOfSecondShifts.join("\r\n");
+  
+  //RESEST 1ST SHIFT
+  var undoArrayOfFirstShifts = unformattedTruckList.split(";");
+  for (var i = 0; i < undoArrayOfFirstShifts.length; i++) {
+    undoArrayOfFirstShifts[i] =
+      calUndo +
+      undoArrayOfFirstShifts[i] +
+      calDateChange +
+      today +
+      calFirstShiftUndo;
   }
-  var reuseArrayOffOutput = reuseArrayOff.join("\r\n"); // join all the items (with their new code padding) in reuseArrayOff into a single item, with a line break ("\r\n") in between. Call that new item reuseArrayOffOutput.
   
-  var reuseArrayOn = truckList.split(";"); // split the single list of trucks from before, which are seperated by a semicolon, into an array. Call that reuseArrayOn.
-  for (var i = 0; i < reuseArrayOn.length; i++) { // for loop, which runs the same number of times as there are items in the reuseArrayOn
-    reuseArrayOn[i] =
-      reuseprefix +
-      reuseArrayOn[i] +
-      reusesuffixOn;
+  var listOfUndoFirstShiftCommands = undoArrayOfFirstShifts.join("\r\n");
+  
+  //RE-USE ON
+  var arrayOfTrucksForReuseOn = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForReuseOn.length; i++) {
+    arrayOfTrucksForReuseOn[i] =
+      reuse +
+      arrayOfTrucksForReuseOn[i] +
+      reuseOn;
   }
-  var reuseArrayOnOutput = reuseArrayOn.join("\r\n"); // join all the items (with their new code padding) in reuseArrayOn into a single item, with a line break ("\r\n") in between. Call that new item reuseArrayOnOutput.
   
-  var output = newestArray; // define a new variable called output, which is newestArray (the list of trucks with Add PRMT3 commands, seperated by line breaks)
-  var outputArray = [ // define a new array called outputArray, which is newestArray, secondShiftArrayOutput, reuseArrayOffOut, and reuseArrayOnOuput combined
-    newestArray,
-    secondShiftArrayOutput,
-    reuseArrayOffOutput,
-    reuseArrayOnOutput
-  ].join("\r\n"); // join all four arrays together into a single item, seperated by a line break
-  var filename = "Undo PRMT3 " + today; // define a new variable, filename, as "Undo PRMT 3" and then today's date
-  var blob = new Blob([outputArray], { type: "cmd" }); // create a new blob, which contains the data from outputArray, with the file type "cmd"
-  saveAs(blob, filename + ".cmd"); // prompt the user to save the blob as filename.cmd
-  document.getElementById('result').innerHTML = outputArray;
+  var listOfReuseOnCommands = arrayOfTrucksForReuseOn.join("\r\n");
+  
+  //RE-USE OFF
+  var arrayOfTrucksForReuseOff = unformattedTruckList.split(";");
+  for (var i = 0; i < arrayOfTrucksForReuseOff.length; i++) {
+    arrayOfTrucksForReuseOff[i] =
+      reuse +
+      arrayOfTrucksForReuseOff[i] +
+      reuseOff;
+  }
+  
+  var listOfReuseOffCommands = arrayOfTrucksForReuseOff.join("\r\n");
+  
+  var outputUndoArray = [
+    listOfUndoRealtimeCutbackCommands,
+    listOfUndoSecondShiftCommands,
+    listOfUndoFirstShiftCommands,
+    listOfReuseOnCommands,
+    listOfReuseOffCommands
+  ].join("\r\n");
+  
+  var filename = "Undo night shift for " + today;
+  var blob = new Blob([outputUndoArray], { type: "cmd" });
+  saveAs(blob, filename + ".cmd");
+  document.getElementById('result').innerHTML = outputUndoArray;
 });
